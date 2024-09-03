@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Free Online Aiff To Wav Converter</title>
+    <style>
+        #drop_zone {
+            width: 800px;
+            height: 400px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            text-align: center;
+            line-height: 200px;
+            color: #aaa;
+            margin: 50px auto;
+            font-size: 58px;
+        }
+        #desc {
+            font-size: 20px;
+            color: #aaa;
+            margin-top: 20px;
+            text-align: center;
+        }
+        #progress-text {
+            font-size: 16px;
+            color: #aaa;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="drop_zone">
+        Drag .aif files here
+    </div>
+    <div id="desc">only support Apple Safari Browser</div>
+    <div id="desc">We do not retain any of your data</div>
+    <div id="progress-text"></div>
+    <script>
+        document.getElementById('drop_zone').addEventListener('drop', handleDrop, false);
+        document.getElementById('drop_zone').addEventListener('dragover', handleDragOver, false);
+
+        function handleDragOver(event) {
+            event.stopPropagation();
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        }
+
+        async function handleDrop(event) {
+            event.stopPropagation();
+            event.preventDefault();
+            const progressText = document.getElementById('progress-text');
+
+            const files = event.dataTransfer.files;
+            const zip = new JSZip();
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                progressText.innerHTML = `Converting ${i + 1} of ${files.length} files`;
+                if (file.name.endsWith('.aif')) {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const audio = new AudioContext();
+                        console.log(arrayBuffer);
+                        const audioBuffer = await audio.decodeAudioData(arrayBuffer);
+                        const wavBuffer = audioBufferToWav(audioBuffer);
+                        zip.file(file.name.replace('.aif', '.wav'), wavBuffer);
+                    } catch (e) {
+                        console.log(e);
+                        alert('something wrong, may by you should use Safari Browser');
+                    }
+                }
+            }
+
+            progressText.innerHTML = 'Generating zip file';
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `${Date.now()}_converted_wavs.zip`;
+            link.click();
+
+            progressText.innerHTML = 'zip download success';
+        }
+
+        function audioBufferToWav (buffer, opt) {
+            opt = opt || {}
+          
+            var numChannels = buffer.numberOfChannels
+            var sampleRate = buffer.sampleRate
+            var format = opt.float32 ? 3 : 1
+            var bitDepth = format === 3 ? 32 : 16
+          
+            var result
+            if (numChannels === 2) {
+              result = interleave(buffer.getChannelData(0), buffer.getChannelData(1))
+            } else {
+              result = buffer.getChannelData(0)
+            }
+          
+            return encodeWAV(result, format, sampleRate, numChannels, bitDepth)
+          }
+          
+          function encodeWAV (samples, format, sampleRate, numChannels, bitDepth) {
+            var bytesPerSample = bitDepth / 8
+            var blockAlign = numChannels * bytesPerSample
+          
+            var buffer = new ArrayBuffer(44 + samples.length * bytesPerSample)
+            var view = new DataView(buffer)
+          
+            /* RIFF identifier */
+            writeString(view, 0, 'RIFF')
+            /* RIFF chunk length */
+            view.setUint32(4, 36 + samples.length * bytesPerSample, true)
+            /* RIFF type */
+            writeString(view, 8, 'WAVE')
+            /* format chunk identifier */
+            writeString(view, 12, 'fmt ')
+            /* format chunk length */
+            view.setUint32(16, 16, true)
+            /* sample format (raw) */
+            view.setUint16(20, format, true)
+            /* channel count */
+            view.setUint16(22, numChannels, true)
+            /* sample rate */
+            view.setUint32(24, sampleRate, true)
+            /* byte rate (sample rate * block align) */
+            view.setUint32(28, sampleRate * blockAlign, true)
+            /* block align (channel count * bytes per sample) */
+            view.setUint16(32, blockAlign, true)
+            /* bits per sample */
+            view.setUint16(34, bitDepth, true)
+            /* data chunk identifier */
+            writeString(view, 36, 'data')
+            /* data chunk length */
+            view.setUint32(40, samples.length * bytesPerSample, true)
+            if (format === 1) { // Raw PCM
+              floatTo16BitPCM(view, 44, samples)
+            } else {
+              writeFloat32(view, 44, samples)
+            }
+          
+            return buffer
+          }
+          
+          function interleave (inputL, inputR) {
+            var length = inputL.length + inputR.length
+            var result = new Float32Array(length)
+          
+            var index = 0
+            var inputIndex = 0
+          
+            while (index < length) {
+              result[index++] = inputL[inputIndex]
+              result[index++] = inputR[inputIndex]
+              inputIndex++
+            }
+            return result
+          }
+          
+          function writeFloat32 (output, offset, input) {
+            for (var i = 0; i < input.length; i++, offset += 4) {
+              output.setFloat32(offset, input[i], true)
+            }
+          }
+          
+          function floatTo16BitPCM (output, offset, input) {
+            for (var i = 0; i < input.length; i++, offset += 2) {
+              var s = Math.max(-1, Math.min(1, input[i]))
+              output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
+            }
+          }
+          
+          function writeString (view, offset, string) {
+            for (var i = 0; i < string.length; i++) {
+              view.setUint8(offset + i, string.charCodeAt(i))
+            }
+          }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</body>
+</html>
